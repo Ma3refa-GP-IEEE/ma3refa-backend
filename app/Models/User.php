@@ -7,10 +7,12 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password'])]
+
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -22,6 +24,8 @@ class User extends Authenticatable
      *
      * @return array<string, string>
      */
+
+    protected $fillable = ['name', 'email', 'password', 'age', 'gender'];
     protected function casts(): array
     {
         return [
@@ -29,4 +33,30 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+    public function streak(): HasOne
+    {
+        return $this->hasOne(Streak::class);
+    }
+    
+    public function quizzes(): HasMany
+    {
+        return $this->hasMany(Quiz::class);
+    }
+    
+    public function userAnswers(): HasMany
+    {
+        return $this->hasMany(UserAnswer::class);
+    }
+    
+    public function subcategoryPoints(): HasMany
+    {
+        return $this->hasMany(UserSubcategoryPoint::class);
+    }
+    
+    public function recommendations(): HasMany
+    {
+        return $this->hasMany(Recommendation::class);
+    }
+
+
 }
