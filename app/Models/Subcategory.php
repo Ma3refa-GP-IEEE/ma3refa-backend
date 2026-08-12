@@ -8,7 +8,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Subcategory extends Model
 {
-    protected $fillable = ['name', 'category_id'];
+    protected $fillable = [
+        'name',
+        'category_id'
+    ];
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -34,5 +37,5 @@ class Subcategory extends Model
         return $this->hasMany(Recommendation::class);
     }
 
-    //
+    
 }

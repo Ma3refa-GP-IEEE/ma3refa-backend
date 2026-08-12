@@ -7,7 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UserSubcategoryPoint extends Model
 {
-    protected $fillable = ['user_id', 'subcategory_id', 'total_points'];
+    protected $fillable = [
+        'user_id', 
+        'subcategory_id', 
+        'total_points'
+    ];
 
     public function user(): BelongsTo
     {
@@ -18,4 +22,5 @@ class UserSubcategoryPoint extends Model
     {
         return $this->belongsTo(Subcategory::class);
     }
+    
 }
