@@ -28,7 +28,8 @@ class QuizPolicy
     
     public function finish(User $user, Quiz $quiz): bool
     {
-        return $user->id === $quiz->user_id && $quiz->finished_at === null;    }
+        return $user->id === $quiz->user_id;
+    }
 
     
 }
