@@ -29,6 +29,21 @@ class QuizController extends Controller
 
         $subcategory = Subcategory::with(['category', 'allowedTopics'])->findOrFail($request->subcategory_id);
 
+        $cached_questions = $this->getCachedQuestions($subcategory, $request->difficulty, $request->number_of_questions, Auth::id());
+
+        $cached_count = $cached_questions->count();
+        $remaining = $request->number_of_questions - $cached_count;
+
+        if ($remaining === 0) {
+            $quiz = $this->storeQuizFromCache($cached_questions, $request->subcategory_id, $request->difficulty);
+
+            $quiz->load('questions');
+
+            return new QuizResource($quiz);
+        }
+
+
+
         $difficulty_map = [1 => 'easy', 2 => 'medium', 3 => 'hard'];
         $difficulty_text = $difficulty_map[$request->difficulty];
 
@@ -48,6 +63,20 @@ class QuizController extends Controller
         $quiz->load('questions');
 
         return new QuizResource($quiz);
+    }
+
+    public function getCachedQuestions($subcategory, $difficulty, $number_of_questions, $id)
+    {
+        $cached_question = Question::whereIn('allowed_topic_id', $subcategory->allowedTopics->pluck('id'))
+            ->where('level', $difficulty)
+            ->whereDoesntHave('userAnswers', function ($query) use ($id) {
+                $query->where('user_id', $id);
+            })
+            ->inRandomOrder()
+            ->limit($number_of_questions)
+            ->get();
+
+        return $cached_question;
     }
 
     public function callAiService(array $payload)
@@ -84,6 +113,26 @@ class QuizController extends Controller
         }
 
         return $mapped_questions;
+    }
+
+    public function storeQuizFromCache($questions, $subcategoryId, $difficulty)
+    {
+        return DB::transaction(function () use ($questions, $subcategoryId, $difficulty) {
+            $quiz = Quiz::create([
+                'user_id'         => Auth::id(),
+                'subcategory_id'  => $subcategoryId,
+                'difficulty'      => $difficulty,
+                'score'           => 0,
+                'total_questions' => $questions->count(),
+                'created_at'      => now(),
+            ]);
+
+            foreach ($questions as $index => $question) {
+                $quiz->questions()->attach($question->id, ['question_order' => $index + 1]);
+            }
+
+            return $quiz;
+        });
     }
 
     public function storeQuizWithQuestions($mapped_questions, $subcategory, $difficulty, $number_of_questions)
@@ -177,7 +226,7 @@ class QuizController extends Controller
             $user_point = UserSubcategoryPoint::firstOrCreate(
                 [
                     'user_id'        => $userId,
-                    'subcategory_id' => $request->subcategory_id,
+                    'subcategory_id' => $quiz->subcategory_id,
                 ],
                 [
                     'total_points'   => 0
