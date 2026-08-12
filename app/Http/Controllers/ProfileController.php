@@ -21,13 +21,13 @@ class ProfileController extends Controller
             ->whereNotNull('finished_at')
             ->count();
 
-        $totalPointsSum = $user->subcategoryPoints()->sum('total_points');
+        $totalPointsSum = (int) $user->subcategoryPoints()->sum('total_points');
 
         $subcategoryPoints = $user->subcategoryPoints->map(function ($point) {
             return [
                 'subcategory_id'   => $point->subcategory_id,
                 'subcategory_name' => $point->subcategory->name ?? null,
-                'total_points'     => $point->total_points,
+                'total_points'     => (int) $point->total_points,
             ];
         });
 
