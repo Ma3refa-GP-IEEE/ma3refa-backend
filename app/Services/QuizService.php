@@ -11,23 +11,24 @@ use App\Models\Streak;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class QuizService
 {
-    public function generateQuiz(Subcategory $subcategory, int $difficulty, int $numberOfQuestions, int $userId): Quiz
+    public function generateQuiz(Subcategory $subcategory, string $difficulty, int $numberOfQuestions, int $userId): Quiz
     {
+        $difficulty = strtolower($difficulty);
+
         $cachedQuestions = $this->getCachedQuestions($subcategory, $difficulty, $numberOfQuestions, $userId);
 
         if ($cachedQuestions->count() >= $numberOfQuestions) {
             $quiz = $this->storeQuizFromCache($cachedQuestions, $subcategory->id, $difficulty);
         } else {
-            $difficultyMap = [1 => 'easy', 2 => 'medium', 3 => 'hard'];
-
             $payload = [
                 "category"       => $subcategory->category->name,
-                "sub_category"    => $subcategory->name,
-                "difficulty"     => $difficultyMap[$difficulty],
+                "sub_category"   => $subcategory->name,
+                "difficulty"     => $difficulty,
                 "allowed_topics" => $subcategory->allowedTopics->pluck('topic_name'),
                 "num_questions"  => $numberOfQuestions,
             ];
@@ -47,24 +48,28 @@ class QuizService
 
     public function finishQuiz(Quiz $quiz, array $data, int $userId): void
     {
-        // منع الـ Score Spoofing وحسابه أمنياً من الـ Backend
         $calculatedScore = collect($data['answers'])->where('is_correct', true)->count();
 
         DB::transaction(function () use ($quiz, $data, $userId, $calculatedScore) {
+            $userAnswers = [];
+            $now = now();
+
             foreach ($data['answers'] as $answer) {
-                UserAnswer::create([
+                $userAnswers[] = [
                     'user_id'         => $userId,
                     'quiz_id'         => $quiz->id,
                     'question_id'     => $answer['question_id'],
                     'selected_answer' => strtolower($answer['selected_answer']),
                     'is_correct'      => $answer['is_correct'],
-                    'answered_at'     => now(),
-                ]);
+                    'answered_at'     => $now,
+                ];
             }
+
+            UserAnswer::insert($userAnswers);
 
             $quiz->update([
                 'score'       => $calculatedScore,
-                'finished_at' => now(),
+                'finished_at' => $now,
             ]);
 
             $userPoint = UserSubcategoryPoint::firstOrCreate(
@@ -80,7 +85,7 @@ class QuizService
         });
     }
 
-    private function getCachedQuestions(Subcategory $subcategory, int $difficulty, int $limit, int $userId)
+    private function getCachedQuestions(Subcategory $subcategory, string $difficulty, int $limit, int $userId)
     {
         return Question::whereIn('allowed_topic_id', $subcategory->allowedTopics->pluck('id'))
             ->where('level', $difficulty)
@@ -92,7 +97,7 @@ class QuizService
             ->get();
     }
 
-    private function storeQuizFromCache($questions, int $subcategoryId, int $difficulty): Quiz
+    private function storeQuizFromCache($questions, int $subcategoryId, string $difficulty): Quiz
     {
         return DB::transaction(function () use ($questions, $subcategoryId, $difficulty) {
             $quiz = Quiz::create([
@@ -104,9 +109,12 @@ class QuizService
                 'created_at'      => now(),
             ]);
 
+            $attachData = [];
             foreach ($questions as $index => $question) {
-                $quiz->questions()->attach($question->id, ['question_order' => $index + 1]);
+                $attachData[$question->id] = ['question_order' => $index + 1];
             }
+
+            $quiz->questions()->attach($attachData);
 
             return $quiz;
         });
@@ -114,7 +122,22 @@ class QuizService
 
     private function callAiService(array $payload): array
     {
-        $response = Http::timeout(15)->post('https://ma3refa-ai-engine-546d.vercel.app/api/generate-quiz', $payload);
+        $aiUrl = config('services.ai_engine.url', 'https://ma3refa-ai-engine-546d.vercel.app/api/generate-quiz');
+
+        $response = Http::timeout(15)
+            ->retry(2, 200)
+            ->post($aiUrl, $payload);
+
+        if ($response->failed()) {
+            Log::error('AI Engine Service Failed', [
+                'status'  => $response->status(),
+                'body'    => $response->body(),
+                'payload' => $payload,
+            ]);
+
+            throw new \Exception('Failed to generate questions from AI service.', 502);
+        }
+
         return $response->json();
     }
 
@@ -149,7 +172,7 @@ class QuizService
         return $mappedQuestions;
     }
 
-    private function storeQuizWithQuestions(array $mappedQuestions, Subcategory $subcategory, int $difficulty, int $numberOfQuestions, int $userId): Quiz
+    private function storeQuizWithQuestions(array $mappedQuestions, Subcategory $subcategory, string $difficulty, int $numberOfQuestions, int $userId): Quiz
     {
         return DB::transaction(function () use ($mappedQuestions, $subcategory, $difficulty, $numberOfQuestions, $userId) {
             $quiz = Quiz::create([
@@ -160,6 +183,8 @@ class QuizService
                 'total_questions' => $numberOfQuestions,
                 'created_at'      => now(),
             ]);
+
+            $attachData = [];
 
             foreach ($mappedQuestions as $index => $question) {
                 $questionRecord = Question::firstOrCreate(
@@ -177,8 +202,10 @@ class QuizService
                     ]
                 );
 
-                $quiz->questions()->attach($questionRecord->id, ['question_order' => $index + 1]);
+                $attachData[$questionRecord->id] = ['question_order' => $index + 1];
             }
+
+            $quiz->questions()->attach($attachData);
 
             return $quiz;
         });
@@ -188,23 +215,27 @@ class QuizService
     {
         $today = Carbon::today();
 
-        $streak = Streak::firstOrCreate(
-            ['user_id' => $userId],
-            ['current_streak' => 1, 'last_activity_date' => $today]
-        );
+        $streak = Streak::where('user_id', $userId)->lockForUpdate()->first();
 
-        if (!$streak->wasRecentlyCreated) {
-            $lastActivity = Carbon::parse($streak->last_activity_date)->startOfDay();
+        if (!$streak) {
+            Streak::create([
+                'user_id'            => $userId,
+                'current_streak'     => 1,
+                'last_activity_date' => $today,
+            ]);
+            return;
+        }
 
-            if ($lastActivity->isYesterday()) {
-                $streak->increment('current_streak');
-                $streak->update(['last_activity_date' => $today]);
-            } elseif ($lastActivity->lt($today->copy()->subDay())) {
-                $streak->update([
-                    'current_streak'     => 1,
-                    'last_activity_date' => $today,
-                ]);
-            }
+        $lastActivity = Carbon::parse($streak->last_activity_date)->startOfDay();
+
+        if ($lastActivity->isYesterday()) {
+            $streak->increment('current_streak');
+            $streak->update(['last_activity_date' => $today]);
+        } elseif ($lastActivity->lt($today->copy()->subDay())) {
+            $streak->update([
+                'current_streak'     => 1,
+                'last_activity_date' => $today,
+            ]);
         }
     }
 }

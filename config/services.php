@@ -35,8 +35,14 @@ return [
         ],
     ],
 
+
     'recommendations' => [
         'url' => env('RECOMMENDATIONS_URL'),
     ],
+
+
+'ai_engine' => [
+    'url' => env('AI_ENGINE_URL'),
+],
 
 ];

@@ -12,7 +12,6 @@ use Illuminate\Http\Request;
 
 class SubcategoryController extends Controller
 {
-
     public function quizzes(Request $request, int $subcategory_id): JsonResponse
     {
         $userId = Auth::id();
@@ -25,17 +24,6 @@ class SubcategoryController extends Controller
             ], 404);
         }
 
-        $hasQuizzes = Quiz::where('user_id', $userId)
-            ->where('subcategory_id', $subcategory_id)
-            ->whereNotNull('finished_at')
-            ->exists();
-
-        if (! $hasQuizzes) {
-            return response()->json([
-                'message' => 'the user has no quizzes in this subcategory',
-            ], 404);
-        }
-
         $perPage = (int) $request->query('per_page', 10);
         $page = (int) $request->query('page', 1);
 
@@ -45,27 +33,33 @@ class SubcategoryController extends Controller
             ->orderByDesc('created_at')
             ->paginate($perPage, ['*'], 'page', $page);
 
+        if ($paginated->isEmpty()) {
+            return response()->json([
+                'message' => 'the user has no quizzes in this subcategory',
+            ], 404);
+        }
+
         $totalPoints = UserSubcategoryPoint::where('user_id', $userId)
             ->where('subcategory_id', $subcategory_id)
             ->value('total_points') ?? 0;
 
         return response()->json([
             'subcategory_id' => $subcategory_id,
-            'subcategory' => $subcategory->name,
-            'total_points' => $totalPoints,
-            'quizzes' => $paginated->getCollection()->map(fn(Quiz $q) => [
-                'quiz_id' => $q->id,
-                'difficulty' => $q->difficulty,
-                'score' => $q->score,
+            'subcategory'    => $subcategory->name,
+            'total_points'   => (int) $totalPoints,
+            'quizzes'        => $paginated->getCollection()->map(fn(Quiz $q) => [
+                'quiz_id'         => $q->id,
+                'difficulty'      => (string) $q->difficulty,
+                'score'           => $q->score,
                 'total_questions' => $q->total_questions,
-                'created_at' => $q->created_at,
+                'created_at'      => $q->created_at,
             ])->values(),
             'pagination' => [
-                'current_page' => $paginated->currentPage(),
-                'per_page' => $paginated->perPage(),
+                'current_page'  => $paginated->currentPage(),
+                'per_page'      => $paginated->perPage(),
                 'total_quizzes' => $paginated->total(),
-                'total_pages' => $paginated->lastPage(),
+                'total_pages'   => $paginated->lastPage(),
             ],
-        ]);
+        ], 200);
     }
 }

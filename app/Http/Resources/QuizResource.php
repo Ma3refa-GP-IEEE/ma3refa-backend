@@ -1,20 +1,19 @@
 <?php
 
 namespace App\Http\Resources;
+
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class QuizResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         return [
             'quiz_id' => $this->id,
+            'difficulty' => (string) $this->difficulty,
+            'total_questions' => $this->total_questions,
+            'created_at' => $this->created_at,
             'questions' => $this->whenLoaded('questions', function () {
                 return $this->questions->map(function ($question) {
                     return [
@@ -26,10 +25,10 @@ class QuizResource extends JsonResource
                         'option_d' => $question->option_d,
                         'correct_answer' => $question->correct_answer,
                         'explanation' => $question->explanation,
+                        'level' => (string) $question->level,
                     ];
                 });
             }),
         ];
     }
-    }
-
+}

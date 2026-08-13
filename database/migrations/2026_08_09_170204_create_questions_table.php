@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('questions', function (Blueprint $table) {
             $table->id();
             $table->text('description');
-            $table->integer('level');
+            $table->enum('level', ['easy', 'medium', 'hard']);
             $table->string('option_a');
             $table->string('option_b');
             $table->string('option_c');
@@ -26,6 +26,7 @@ return new class extends Migration
         
         });
     }
+    
 
     /**
      * Reverse the migrations.
