@@ -49,7 +49,7 @@ class SubcategoryController extends Controller
             'total_points'   => (int) $totalPoints,
             'quizzes'        => $paginated->getCollection()->map(fn(Quiz $q) => [
                 'quiz_id'         => $q->id,
-                'difficulty'      => $q->difficulty,
+                'difficulty'      => (string) $q->difficulty,
                 'score'           => $q->score,
                 'total_questions' => $q->total_questions,
                 'created_at'      => $q->created_at,

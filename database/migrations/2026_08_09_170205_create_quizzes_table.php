@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained('users');
             $table->foreignId('subcategory_id')->constrained('subcategories');
-            $table->integer('difficulty');
+            $table->enum('difficulty', ['easy', 'medium', 'hard']);
             $table->integer('score');
             $table->integer('total_questions');
             $table->boolean('included_in_recommendation_batch')->default(false);

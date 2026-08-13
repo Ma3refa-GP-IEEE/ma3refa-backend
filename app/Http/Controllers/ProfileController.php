@@ -7,9 +7,6 @@ use Illuminate\Http\Request;
 
 class ProfileController extends Controller
 {
-    /**
-     * Get authenticated user profile data with subcategory points and quiz brief.
-     */
     public function show(Request $request): JsonResponse
     {
         $user = $request->user()->load([
@@ -21,7 +18,7 @@ class ProfileController extends Controller
             ->whereNotNull('finished_at')
             ->count();
 
-        $totalPointsSum = (int) $user->subcategoryPoints()->sum('total_points');
+        $totalPointsSum = (int) $user->subcategoryPoints->sum('total_points');
 
         $subcategoryPoints = $user->subcategoryPoints->map(function ($point) {
             return [

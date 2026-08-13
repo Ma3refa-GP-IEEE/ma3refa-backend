@@ -16,19 +16,19 @@ use Carbon\Carbon;
 
 class QuizService
 {
-    public function generateQuiz(Subcategory $subcategory, int $difficulty, int $numberOfQuestions, int $userId): Quiz
+    public function generateQuiz(Subcategory $subcategory, string $difficulty, int $numberOfQuestions, int $userId): Quiz
     {
+        $difficulty = strtolower($difficulty);
+
         $cachedQuestions = $this->getCachedQuestions($subcategory, $difficulty, $numberOfQuestions, $userId);
 
         if ($cachedQuestions->count() >= $numberOfQuestions) {
             $quiz = $this->storeQuizFromCache($cachedQuestions, $subcategory->id, $difficulty);
         } else {
-            $difficultyMap = [1 => 'easy', 2 => 'medium', 3 => 'hard'];
-
             $payload = [
                 "category"       => $subcategory->category->name,
-                "sub_category"    => $subcategory->name,
-                "difficulty"     => $difficultyMap[$difficulty],
+                "sub_category"   => $subcategory->name,
+                "difficulty"     => $difficulty,
                 "allowed_topics" => $subcategory->allowedTopics->pluck('topic_name'),
                 "num_questions"  => $numberOfQuestions,
             ];
@@ -62,8 +62,6 @@ class QuizService
                     'selected_answer' => strtolower($answer['selected_answer']),
                     'is_correct'      => $answer['is_correct'],
                     'answered_at'     => $now,
-                    'created_at'      => $now,
-                    'updated_at'      => $now,
                 ];
             }
 
@@ -87,7 +85,7 @@ class QuizService
         });
     }
 
-    private function getCachedQuestions(Subcategory $subcategory, int $difficulty, int $limit, int $userId)
+    private function getCachedQuestions(Subcategory $subcategory, string $difficulty, int $limit, int $userId)
     {
         return Question::whereIn('allowed_topic_id', $subcategory->allowedTopics->pluck('id'))
             ->where('level', $difficulty)
@@ -99,7 +97,7 @@ class QuizService
             ->get();
     }
 
-    private function storeQuizFromCache($questions, int $subcategoryId, int $difficulty): Quiz
+    private function storeQuizFromCache($questions, int $subcategoryId, string $difficulty): Quiz
     {
         return DB::transaction(function () use ($questions, $subcategoryId, $difficulty) {
             $quiz = Quiz::create([
@@ -174,7 +172,7 @@ class QuizService
         return $mappedQuestions;
     }
 
-    private function storeQuizWithQuestions(array $mappedQuestions, Subcategory $subcategory, int $difficulty, int $numberOfQuestions, int $userId): Quiz
+    private function storeQuizWithQuestions(array $mappedQuestions, Subcategory $subcategory, string $difficulty, int $numberOfQuestions, int $userId): Quiz
     {
         return DB::transaction(function () use ($mappedQuestions, $subcategory, $difficulty, $numberOfQuestions, $userId) {
             $quiz = Quiz::create([

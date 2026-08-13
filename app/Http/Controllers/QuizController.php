@@ -28,14 +28,15 @@ class QuizController extends Controller
         try {
             $quiz = $this->quizService->generateQuiz(
                 $subcategory,
-                $request->difficulty,
-                $request->number_of_questions,
+                (string) $request->difficulty,
+                (int) $request->number_of_questions,
                 Auth::id()
             );
 
             return new QuizResource($quiz);
         } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], $e->getCode() ?: 500);
+            $statusCode = is_numeric($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600 ? (int) $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $statusCode);
         }
     }
 
