@@ -10,7 +10,8 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 class CheckRecommendationBatch implements ShouldQueue
 {
     public function handle(QuizFinished $event): void
-    {
+    {   
+        $batchSize = 5;
         $userId = $event->quiz->user_id;
 
         $pendingCount = Quiz::where('user_id', $userId)
@@ -18,7 +19,7 @@ class CheckRecommendationBatch implements ShouldQueue
             ->whereNotNull('finished_at')
             ->count();
 
-        if ($pendingCount < 5) {
+        if ($pendingCount < $batchSize) {
             return;
         }
 

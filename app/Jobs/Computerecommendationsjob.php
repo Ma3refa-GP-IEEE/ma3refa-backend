@@ -22,10 +22,6 @@ class ComputeRecommendationsJob implements ShouldQueue
 
     public int $tries = 1;
 
-    /**
-     * @param array<int> $quizIds exactly 5 quiz IDs,
-     * all currently included_in_recommendation_batch = false
-     */
     public function __construct(
         public int $userId,
         public array $quizIds,
@@ -33,20 +29,10 @@ class ComputeRecommendationsJob implements ShouldQueue
 
     public function handle(): void
     {
-        $difficultyToText = [
-            1 => 'Easy',
-            2 => 'Medium',
-            3 => 'Hard',
-        ];
-
-        $textToDifficulty = array_flip($difficultyToText);
-
         $quizzes = Quiz::with([
             'subcategory',
             'userAnswers.question.allowedTopic'
-        ])
-            ->whereIn('id', $this->quizIds)
-            ->get();
+        ])->whereIn('id', $this->quizIds)->get();
 
         if ($quizzes->count() !== count($this->quizIds)) {
             Log::warning(
@@ -62,19 +48,14 @@ class ComputeRecommendationsJob implements ShouldQueue
 
         $payload = [
             'student_id' => $this->userId,
-
             'recent_quizzes' => $quizzes->map(
-                fn (Quiz $quiz) => [
+                fn(Quiz $quiz) => [
                     'quiz_id' => $quiz->id,
-
                     'subcategory' => $quiz->subcategory->name,
-
-                    'difficulty' => $difficultyToText[$quiz->difficulty] ?? 'Medium',
-
+                    'difficulty' => $quiz->difficulty,
                     'answers' => $quiz->userAnswers->map(
-                        fn (UserAnswer $answer) => [
+                        fn(UserAnswer $answer) => [
                             'topic' => $answer->question->allowedTopic->topic_name,
-
                             'is_correct' => (bool) $answer->is_correct,
                         ]
                     )->values(),
@@ -84,7 +65,7 @@ class ComputeRecommendationsJob implements ShouldQueue
 
         $response = Http::timeout(15)
             ->post(
-                config('services.recommendations.url') . '/recommendations',
+                config('services.recommendations.url'),
                 $payload
             );
 
@@ -101,7 +82,6 @@ class ComputeRecommendationsJob implements ShouldQueue
         }
 
         $rawRecommendations = $response->json('recommendations', []);
-
         $mapped = [];
 
         foreach ($rawRecommendations as $rec) {
@@ -126,25 +106,19 @@ class ComputeRecommendationsJob implements ShouldQueue
 
             $mapped[] = [
                 'user_id' => $this->userId,
-
                 'subcategory_id' => $subcategory->id,
-
                 'allowed_topic_id' => $allowedTopic->id,
-
-                'difficulty' => $textToDifficulty[$rec['difficulty']] ?? 2,
-
+                'difficulty' => $rec['difficulty'],
                 'created_at' => now(),
             ];
         }
 
         DB::transaction(function () use ($mapped) {
-            Quiz::whereIn('id', $this->quizIds)
-                ->update([
-                    'included_in_recommendation_batch' => true,
-                ]);
+            Quiz::whereIn('id', $this->quizIds)->update([
+                'included_in_recommendation_batch' => true,
+            ]);
 
-            Recommendation::where('user_id', $this->userId)
-                ->delete();
+            Recommendation::where('user_id', $this->userId)->delete();
 
             if (! empty($mapped)) {
                 Recommendation::insert($mapped);
