@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-
+use App\Models\UserAnswer;
 class Quiz extends Model
 {
     protected $fillable = ['user_id', 'subcategory_id', 'difficulty', 'score', 'total_questions', 'included_in_recommendation_batch', 'created_at', 'finished_at'];

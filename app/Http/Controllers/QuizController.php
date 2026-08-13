@@ -11,6 +11,7 @@ use App\Models\Subcategory;
 use App\Services\QuizService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use App\Events\QuizFinished;
 
 class QuizController extends Controller
 {
@@ -61,6 +62,7 @@ class QuizController extends Controller
 
         $this->quizService->finishQuiz($quiz, $request->validated(), Auth::id());
 
+        event(new QuizFinished($quiz));
         return response()->json([
             'message' => 'Quiz finished successfully'
         ], 200);

@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'recommendations' => [
+        'url' => env('RECOMMENDATIONS_URL'),
+    ],
+
 ];
