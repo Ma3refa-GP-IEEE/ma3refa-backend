@@ -18,7 +18,7 @@ class FinishQuizRequest extends FormRequest
             'score'                     => ['required', 'integer', 'min:0', 'max:50'],
             'answers'                   => ['required', 'array'],
             'answers.*.question_id'     => ['required', 'integer', 'exists:questions,id'],
-            'answers.*.selected_answer' => ['required', 'string', 'in:a,b,c,d,A,B,C,D'],
+            'answers.*.selected_answer' => ['nullable', 'string', 'in:a,b,c,d,A,B,C,D'],
             'answers.*.is_correct'      => ['required', 'boolean'],
         ];
     }

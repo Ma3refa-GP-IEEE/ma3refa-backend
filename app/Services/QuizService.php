@@ -46,45 +46,54 @@ class QuizService
         return $quiz->load('questions');
     }
 
-    public function finishQuiz(Quiz $quiz, array $data, int $userId): void
-    {
-        $calculatedScore = collect($data['answers'])->where('is_correct', true)->count();
+   public function finishQuiz(Quiz $quiz, array $data, int $userId): void
+{
+    DB::transaction(function () use ($quiz, $data, $userId) {
+        $now = now();
 
-        DB::transaction(function () use ($quiz, $data, $userId, $calculatedScore) {
-            $userAnswers = [];
-            $now = now();
+        $questionIds = collect($data['answers'])->pluck('question_id');
+        $questions = Question::whereIn('id', $questionIds)->get()->keyBy('id');
 
-            foreach ($data['answers'] as $answer) {
-                $userAnswers[] = [
-                    'user_id'         => $userId,
-                    'quiz_id'         => $quiz->id,
-                    'question_id'     => $answer['question_id'],
-                    'selected_answer' => strtolower($answer['selected_answer']),
-                    'is_correct'      => $answer['is_correct'],
-                    'answered_at'     => $now,
-                ];
+        $userAnswers = [];
+        $calculatedScore = 0;
+
+        foreach ($data['answers'] as $answer) {
+            $question = $questions[$answer['question_id']];
+            $actualIsCorrect = strtolower($answer['selected_answer'] ?? '') === strtolower($question->correct_answer);
+
+            if ($actualIsCorrect) {
+                $calculatedScore++;
             }
 
-            UserAnswer::insert($userAnswers);
+            $userAnswers[] = [
+                'user_id'         => $userId,
+                'quiz_id'         => $quiz->id,
+                'question_id'     => $answer['question_id'],
+                'selected_answer' => $answer['selected_answer'] ?? null,
+                'is_correct'      => $actualIsCorrect,
+                'answered_at'     => $now,
+            ];
+        }
 
-            $quiz->update([
-                'score'       => $calculatedScore,
-                'finished_at' => $now,
-            ]);
+        UserAnswer::insert($userAnswers);
 
-            $userPoint = UserSubcategoryPoint::firstOrCreate(
-                [
-                    'user_id'        => $userId,
-                    'subcategory_id' => $quiz->subcategory_id,
-                ],
-                ['total_points' => 0]
-            );
-            $userPoint->increment('total_points', $calculatedScore);
+        $quiz->update([
+            'score'       => $calculatedScore,
+            'finished_at' => $now,
+        ]);
 
-            $this->updateUserStreak($userId);
-        });
-    }
+        $userPoint = UserSubcategoryPoint::firstOrCreate(
+            [
+                'user_id'        => $userId,
+                'subcategory_id' => $quiz->subcategory_id,
+            ],
+            ['total_points' => 0]
+        );
+        $userPoint->increment('total_points', $calculatedScore);
 
+        $this->updateUserStreak($userId);
+    });
+}
     private function getCachedQuestions(Subcategory $subcategory, string $difficulty, int $limit, int $userId)
     {
         return Question::whereIn('allowed_topic_id', $subcategory->allowedTopics->pluck('id'))
