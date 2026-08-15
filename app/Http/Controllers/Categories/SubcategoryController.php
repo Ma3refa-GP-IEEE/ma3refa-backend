@@ -33,12 +33,6 @@ class SubcategoryController extends Controller
             ->orderByDesc('created_at')
             ->paginate($perPage, ['*'], 'page', $page);
 
-        if ($paginated->isEmpty()) {
-            return response()->json([
-                'message' => 'the user has no quizzes in this subcategory',
-            ], 404);
-        }
-
         $totalPoints = UserSubcategoryPoint::where('user_id', $userId)
             ->where('subcategory_id', $subcategory_id)
             ->value('total_points') ?? 0;
