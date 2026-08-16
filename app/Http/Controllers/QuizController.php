@@ -23,23 +23,24 @@ class QuizController extends Controller
     }
 
     public function generate(GenerateQuizRequest $request)
-    {
-        $subcategory = Subcategory::with(['category', 'allowedTopics'])->findOrFail($request->subcategory_id);
+{
+    $subcategory = Subcategory::with(['category', 'allowedTopics'])->findOrFail($request->subcategory_id);
 
-        try {
-            $quiz = $this->quizService->generateQuiz(
-                $subcategory,
-                (string) $request->difficulty,
-                (int) $request->number_of_questions,
-                Auth::id()
+    try {
+        $quiz = $this->quizService->generateQuiz(
+            $subcategory,
+            (string) $request->difficulty,
+            (int) $request->number_of_questions,
+            Auth::id(),
+            (array) $request->input('topics', []) 
             );
 
-            return new QuizResource($quiz);
-        } catch (\Exception $e) {
-            $statusCode = is_numeric($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600 ? (int) $e->getCode() : 500;
-            return response()->json(['message' => $e->getMessage()], $statusCode);
-        }
+        return new QuizResource($quiz);
+    } catch (\Exception $e) {
+        $statusCode = is_numeric($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600 ? (int) $e->getCode() : 500;
+        return response()->json(['message' => $e->getMessage()], $statusCode);
     }
+}
 
     public function show($id)
     {

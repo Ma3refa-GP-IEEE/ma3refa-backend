@@ -16,84 +16,116 @@ use Carbon\Carbon;
 
 class QuizService
 {
-    public function generateQuiz(Subcategory $subcategory, string $difficulty, int $numberOfQuestions, int $userId): Quiz
-    {
-        $difficulty = strtolower($difficulty);
+  public function generateQuiz(
+    Subcategory $subcategory, 
+    string $difficulty, 
+    int $numberOfQuestions, 
+    int $userId, 
+    array $selectedTopics = []
+): Quiz {
+    $difficulty = strtolower($difficulty);
 
+    $cachedQuestions = collect();
+    if (empty($selectedTopics)) {
         $cachedQuestions = $this->getCachedQuestions($subcategory, $difficulty, $numberOfQuestions, $userId);
-
-        if ($cachedQuestions->count() >= $numberOfQuestions) {
-            $quiz = $this->storeQuizFromCache($cachedQuestions, $subcategory->id, $difficulty);
-        } else {
-            $payload = [
-                "category"       => $subcategory->category->name,
-                "sub_category"   => $subcategory->name,
-                "difficulty"     => $difficulty,
-                "allowed_topics" => $subcategory->allowedTopics->pluck('topic_name'),
-                "num_questions"  => $numberOfQuestions,
-            ];
-
-            $aiResponse = $this->callAiService($payload);
-
-            if (!isset($aiResponse['questions']) || !is_array($aiResponse['questions'])) {
-                throw new \Exception('Failed to generate questions from AI service.', 502);
-            }
-
-            $mappedQuestions = $this->mapAiResponseToQuestions($aiResponse, $subcategory);
-            $quiz = $this->storeQuizWithQuestions($mappedQuestions, $subcategory, $difficulty, $numberOfQuestions, $userId);
-        }
-
-        return $quiz->load('questions');
     }
 
-   public function finishQuiz(Quiz $quiz, array $data, int $userId): void
-{
-    DB::transaction(function () use ($quiz, $data, $userId) {
-        $now = now();
+    if ($cachedQuestions->count() >= $numberOfQuestions) {
+        $quiz = $this->storeQuizFromCache($cachedQuestions, $subcategory->id, $difficulty);
+    } else {
+        $topicsToSend = null;
 
-        $questionIds = collect($data['answers'])->pluck('question_id');
-        $questions = Question::whereIn('id', $questionIds)->get()->keyBy('id');
+        if (!empty($selectedTopics)) {
+            $matchedTopics = $subcategory->allowedTopics()
+                ->whereIn('topic_name', $selectedTopics)
+                ->pluck('topic_name');
 
-        $userAnswers = [];
-        $calculatedScore = 0;
-
-        foreach ($data['answers'] as $answer) {
-            $question = $questions[$answer['question_id']];
-            $actualIsCorrect = strtolower($answer['selected_answer'] ?? '') === strtolower($question->correct_answer);
-
-            if ($actualIsCorrect) {
-                $calculatedScore++;
+            if ($matchedTopics->isNotEmpty()) {
+                $topicsToSend = $matchedTopics;
             }
-
-            $userAnswers[] = [
-                'user_id'         => $userId,
-                'quiz_id'         => $quiz->id,
-                'question_id'     => $answer['question_id'],
-                'selected_answer' => $answer['selected_answer'] ?? null,
-                'is_correct'      => $actualIsCorrect,
-                'answered_at'     => $now,
-            ];
         }
 
-        UserAnswer::insert($userAnswers);
+        if (empty($topicsToSend)) {
+            $topicsToSend = $subcategory->allowedTopics->pluck('topic_name');
+        }
 
-        $quiz->update([
-            'score'       => $calculatedScore,
-            'finished_at' => $now,
-        ]);
+        $payload = [
+            "category"       => $subcategory->category->name,
+            "sub_category"   => $subcategory->name,
+            "difficulty"     => $difficulty,
+            "allowed_topics" => $topicsToSend->values(),
+            "num_questions"  => $numberOfQuestions,
+        ];
 
-        $userPoint = UserSubcategoryPoint::firstOrCreate(
-            [
-                'user_id'        => $userId,
-                'subcategory_id' => $quiz->subcategory_id,
-            ],
-            ['total_points' => 0]
-        );
-        $userPoint->increment('total_points', $calculatedScore);
+        $aiResponse = $this->callAiService($payload);
 
-        $this->updateUserStreak($userId);
-    });
+        if (!isset($aiResponse['questions']) || !is_array($aiResponse['questions'])) {
+            throw new \Exception('Failed to generate questions from AI service.', 502);
+        }
+
+        $mappedQuestions = $this->mapAiResponseToQuestions($aiResponse, $subcategory);
+        $quiz = $this->storeQuizWithQuestions($mappedQuestions, $subcategory, $difficulty, $numberOfQuestions, $userId);
+    }
+
+    return $quiz->load('questions');
 }
+
+    public function finishQuiz(Quiz $quiz, array $data, int $userId): void
+    {
+        DB::transaction(function () use ($quiz, $data, $userId) {
+            $now = now();
+
+            $questionIds = collect($data['answers'])->pluck('question_id');
+            $questions = Question::whereIn('id', $questionIds)->get()->keyBy('id');
+
+            $userAnswers = [];
+            $correctCount = 0;
+
+            foreach ($data['answers'] as $answer) {
+                $question = $questions[$answer['question_id']];
+                $actualIsCorrect = strtolower($answer['selected_answer'] ?? '') === strtolower($question->correct_answer);
+
+                if ($actualIsCorrect) {
+                    $correctCount++;
+                }
+
+                $userAnswers[] = [
+                    'user_id'         => $userId,
+                    'quiz_id'         => $quiz->id,
+                    'question_id'     => $answer['question_id'],
+                    'selected_answer' => $answer['selected_answer'] ?? null,
+                    'is_correct'      => $actualIsCorrect,
+                    'answered_at'     => $now,
+                ];
+            }
+
+            UserAnswer::insert($userAnswers);
+
+            $multiplier = match (strtolower($quiz->difficulty ?? 'easy')) {
+                'medium' => 2,
+                'hard'   => 3,
+                default  => 1,
+            };
+
+            $calculatedScore = $correctCount * $multiplier;
+
+            $quiz->update([
+                'score'       => $calculatedScore,
+                'finished_at' => $now,
+            ]);
+
+            $userPoint = UserSubcategoryPoint::firstOrCreate(
+                [
+                    'user_id'        => $userId,
+                    'subcategory_id' => $quiz->subcategory_id,
+                ],
+                ['total_points' => 0]
+            );
+            $userPoint->increment('total_points', $calculatedScore);
+
+            $this->updateUserStreak($userId);
+        });
+    }
     private function getCachedQuestions(Subcategory $subcategory, string $difficulty, int $limit, int $userId)
     {
         return Question::whereIn('allowed_topic_id', $subcategory->allowedTopics->pluck('id'))
