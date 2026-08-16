@@ -85,15 +85,8 @@ class ComputeRecommendationsJob implements ShouldQueue
         $mapped = [];
 
         foreach ($rawRecommendations as $rec) {
-            $subcategory = Subcategory::where(
-                'name',
-                $rec['subcategory']
-            )->first();
-
-            $allowedTopic = AllowedTopic::where(
-                'topic_name',
-                $rec['topic']
-            )->first();
+            $subcategory = Subcategory::where('name', $rec['subcategory'])->first();
+            $allowedTopic = AllowedTopic::where('topic_name', $rec['topic'])->first();
 
             if (! $subcategory || ! $allowedTopic) {
                 Log::warning(
@@ -114,10 +107,6 @@ class ComputeRecommendationsJob implements ShouldQueue
         }
 
         DB::transaction(function () use ($mapped) {
-            Quiz::whereIn('id', $this->quizIds)->update([
-                'included_in_recommendation_batch' => true,
-            ]);
-
             Recommendation::where('user_id', $this->userId)->delete();
 
             if (! empty($mapped)) {

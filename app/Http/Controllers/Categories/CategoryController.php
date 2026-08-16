@@ -1,16 +1,16 @@
 <?php
 
 namespace App\Http\Controllers\Categories;
-use App\Http\Controllers\Controller;   
-use App\Models\Category;              
-use App\Models\Subcategory;           
-use App\Models\Recommendation;        
+
+use App\Http\Controllers\Controller;
+use App\Models\Category;
+use App\Models\Subcategory;
+use App\Models\Recommendation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 
 class CategoryController extends Controller
 {
-
     public function index(): JsonResponse
     {
         $categories = Category::select('id', 'name')->get();
@@ -23,19 +23,18 @@ class CategoryController extends Controller
             ->get()
             ->map(fn (Recommendation $r) => [
                 'subcategory_id' => $r->subcategory_id,
-                'subcategory' => $r->subcategory->name,
-                'topic' => $r->allowedTopic->topic_name,
-                'difficulty' => $r->difficulty,
+                'subcategory'    => $r->subcategory?->name,
+                'topic'          => $r->allowedTopic?->topic_name,
+                'difficulty'     => $r->difficulty,
             ])
             ->values();
 
         return response()->json([
-            'categories' => $categories,
+            'categories'      => $categories,
             'recommendations' => $recommendations,
         ]);
     }
 
-  
     public function subcategories(int $category_id): JsonResponse
     {
         $category = Category::find($category_id);
@@ -51,7 +50,7 @@ class CategoryController extends Controller
             ->get();
 
         return response()->json([
-            'category_id' => $category_id,
+            'category_id'   => $category_id,
             'subcategories' => $subcategories,
         ]);
     }

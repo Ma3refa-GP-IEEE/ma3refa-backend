@@ -63,7 +63,10 @@ class QuizController extends Controller
 
         $this->quizService->finishQuiz($quiz, $request->validated(), Auth::id());
 
-         event(new QuizFinished($quiz));
+        $quiz->refresh();
+
+        event(new QuizFinished($quiz));
+
         return response()->json([
             'message' => 'Quiz finished successfully'
         ], 200);
