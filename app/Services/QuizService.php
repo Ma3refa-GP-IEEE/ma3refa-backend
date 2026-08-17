@@ -167,13 +167,17 @@ class QuizService
         });
     }
 
-    private function callAiService(array $payload): array
+   private function callAiService(array $payload): array
     {
-        $aiUrl = config('services.ai_engine.url', 'https://ma3refa-ai-engine-546d.vercel.app/api/generate-quiz');
+        $aiUrl = config('services.ai_engine.url');
 
-        $response = Http::timeout(15)
-            ->retry(2, 200)
-            ->post($aiUrl, $payload);
+        $response = Http::withHeaders([
+            'x-internal-key' => config('services.ai_engine.secret_key'),
+            'Accept'         => 'application/json',
+        ])
+        ->timeout(15)
+        ->retry(2, 200)
+        ->post($aiUrl, $payload);
 
         if ($response->failed()) {
             Log::error('AI Engine Service Failed', [

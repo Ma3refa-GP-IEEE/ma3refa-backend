@@ -43,6 +43,7 @@ return [
 
 'ai_engine' => [
     'url' => env('AI_ENGINE_URL'),
+    'secret_key' => env('AI_SERVICE_SECRET_KEY'),
 ],
 
 ];
