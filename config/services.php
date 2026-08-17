@@ -38,6 +38,7 @@ return [
 
     'recommendations' => [
         'url' => env('RECOMMENDATIONS_URL'),
+        'secret_key' => env('RECOMMENDATIONS_SECRET_KEY')
     ],
 
 

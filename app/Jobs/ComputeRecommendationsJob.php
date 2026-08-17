@@ -63,11 +63,15 @@ class ComputeRecommendationsJob implements ShouldQueue
             )->values(),
         ];
 
-        $response = Http::timeout(15)
-            ->post(
-                config('services.recommendations.url'),
-                $payload
-            );
+        $response = Http::withHeaders([
+            'X-API-Key' => config('services.recommendations.secret_key'),
+            'Accept'         => 'application/json',
+        ])
+        ->timeout(15)
+        ->post(
+            config('services.recommendations.url'),
+            $payload
+        );
 
         if (! $response->successful()) {
             Log::warning(
@@ -75,6 +79,7 @@ class ComputeRecommendationsJob implements ShouldQueue
                 [
                     'user_id' => $this->userId,
                     'status' => $response->status(),
+                    'body'   => $response->body(),
                 ]
             );
 
