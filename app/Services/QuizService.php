@@ -36,8 +36,14 @@ class QuizService
         $topicsToSend = null;
 
         if (!empty($selectedTopics)) {
+            $cleanedTopics = array_map(fn($t) => trim(strtolower((string) $t)), $selectedTopics);
+
             $matchedTopics = $subcategory->allowedTopics()
-                ->whereIn('topic_name', $selectedTopics)
+                ->where(function ($query) use ($cleanedTopics) {
+                    foreach ($cleanedTopics as $topic) {
+                        $query->orWhereRaw('LOWER(topic_name) = ?', [$topic]);
+                    }
+                })
                 ->pluck('topic_name');
 
             if ($matchedTopics->isNotEmpty()) {
