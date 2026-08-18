@@ -15,7 +15,7 @@ use Carbon\Carbon;
 
 class QuizService
 {
-    public function generateQuiz(
+   public function generateQuiz(
         Subcategory $subcategory, 
         string $difficulty, 
         int $numberOfQuestions, 
@@ -54,12 +54,25 @@ class QuizService
                 $topicsToSend = $subcategory->allowedTopics->pluck('topic_name');
             }
 
+            $excludedConcepts = Question::whereHas('allowedTopic', function ($query) use ($subcategory) {
+                    $query->where('subcategory_id', $subcategory->id);
+                })
+                ->whereNotNull('concept_tag')
+                ->distinct()
+                ->inRandomOrder()
+                ->limit(50)
+                ->pluck('concept_tag')
+                ->values()
+                ->toArray();
+
             $payload = [
-                "category"       => $subcategory->category->name,
-                "sub_category"   => $subcategory->name,
-                "difficulty"     => $difficulty,
-                "allowed_topics" => $topicsToSend->values(),
-                "num_questions"  => $numberOfQuestions,
+                "category"          => $subcategory->category->name,
+                "sub_category"      => $subcategory->name,
+                "difficulty"        => ucfirst($difficulty),
+                "language"          => "Arabic",
+                "allowed_topics"    => $topicsToSend->values()->toArray(),
+                "num_questions"     => $numberOfQuestions,
+                "excluded_concepts" => $excludedConcepts,
             ];
 
             $aiResponse = $this->callAiService($payload);
@@ -234,6 +247,7 @@ class QuizService
 
             $mappedQuestions[] = [
                 'description'      => $question['question'] ?? '',
+                'concept_tag'      => $question['concept_tag'] ?? null ,
                 'option_a'         => $options[0] ?? '',
                 'option_b'         => $options[1] ?? '',
                 'option_c'         => $options[2] ?? '',
@@ -266,6 +280,7 @@ class QuizService
                     ['description' => $question['description']],
                     [
                         'level'            => $difficulty,
+                        'concept_tag'      => $question['concept_tag'], // 
                         'option_a'         => $question['option_a'],
                         'option_b'         => $question['option_b'],
                         'option_c'         => $question['option_c'],
@@ -285,7 +300,6 @@ class QuizService
             return $quiz;
         });
     }
-
     private function updateUserStreak(int $userId): void
     {
         $today = Carbon::today();
