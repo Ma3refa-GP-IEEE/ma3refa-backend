@@ -70,7 +70,6 @@ class QuizService
                 "category"          => $subcategory->category?->name ?? 'General',
                 "sub_category"      => $subcategory->name,
                 "difficulty"        => ucfirst($difficulty),
-                "language"          => "Arabic",
                 "allowed_topics"    => $topicsToSend->values()->toArray(),
                 "num_questions"     => $numberOfQuestions,
                 "excluded_concepts" => $excludedConcepts,
