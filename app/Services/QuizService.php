@@ -15,11 +15,11 @@ use Carbon\Carbon;
 
 class QuizService
 {
-   public function generateQuiz(
-        Subcategory $subcategory, 
-        string $difficulty, 
-        int $numberOfQuestions, 
-        int $userId, 
+    public function generateQuiz(
+        Subcategory $subcategory,
+        string $difficulty,
+        int $numberOfQuestions,
+        int $userId,
         array $selectedTopics = []
     ): Quiz {
         $difficulty = strtolower($difficulty);
@@ -51,10 +51,11 @@ class QuizService
             }
 
             if (empty($topicsToSend)) {
-                $topicsToSend = $subcategory->allowedTopics->pluck('topic_name');
+                $topicsToSend = $subcategory->allowedTopics()->pluck('topic_name');
             }
 
-            $excludedConcepts = Question::whereHas('allowedTopic', function ($query) use ($subcategory) {
+            $excludedConcepts = Question::where('level', $difficulty)
+                ->whereHas('allowedTopic', function ($query) use ($subcategory) {
                     $query->where('subcategory_id', $subcategory->id);
                 })
                 ->whereNotNull('concept_tag')
@@ -66,7 +67,7 @@ class QuizService
                 ->toArray();
 
             $payload = [
-                "category"          => $subcategory->category->name,
+                "category"          => $subcategory->category?->name ?? 'General',
                 "sub_category"      => $subcategory->name,
                 "difficulty"        => ucfirst($difficulty),
                 "language"          => "Arabic",
@@ -91,7 +92,6 @@ class QuizService
     public function finishQuiz(Quiz $quiz, array $data, int $userId): void
     {
         DB::transaction(function () use ($quiz, $data, $userId) {
-            // قفل سجل الكويز لضمان عدم إنهائه في نفس الوقت
             $lockedQuiz = Quiz::where('id', $quiz->id)->lockForUpdate()->first();
 
             if ($lockedQuiz->finished_at !== null) {
@@ -99,10 +99,8 @@ class QuizService
             }
 
             $now = now();
-
             $questionIds = collect($data['answers'])->pluck('question_id');
-            
-            // التأكد من جلب الأسئلة التابعة لهذا الكويز فقط
+
             $questions = $lockedQuiz->questions()->whereIn('questions.id', $questionIds)->get()->keyBy('id');
 
             $userAnswers = [];
@@ -111,7 +109,6 @@ class QuizService
             foreach ($data['answers'] as $answer) {
                 $qId = $answer['question_id'] ?? null;
 
-                // تجاهل أي سؤال لا ينتمي لهذا الكويز
                 if (!isset($questions[$qId])) {
                     continue;
                 }
@@ -171,7 +168,7 @@ class QuizService
 
     private function getCachedQuestions(Subcategory $subcategory, string $difficulty, int $limit, int $userId)
     {
-        return Question::whereIn('allowed_topic_id', $subcategory->allowedTopics->pluck('id'))
+        return Question::whereIn('allowed_topic_id', $subcategory->allowedTopics()->pluck('id'))
             ->where('level', $difficulty)
             ->whereDoesntHave('userAnswers', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
@@ -212,9 +209,9 @@ class QuizService
             'x-internal-key' => config('services.ai_engine.secret_key'),
             'Accept'         => 'application/json',
         ])
-        ->timeout(15)
-        ->retry(2, 200)
-        ->post($aiUrl, $payload);
+            ->timeout(15)
+            ->retry(2, 200)
+            ->post($aiUrl, $payload);
 
         if ($response->failed()) {
             Log::error('AI Engine Service Failed', [
@@ -247,7 +244,7 @@ class QuizService
 
             $mappedQuestions[] = [
                 'description'      => $question['question'] ?? '',
-                'concept_tag'      => $question['concept_tag'] ?? null ,
+                'concept_tag'      => $question['concept_tag'] ?? null,
                 'option_a'         => $options[0] ?? '',
                 'option_b'         => $options[1] ?? '',
                 'option_c'         => $options[2] ?? '',
@@ -280,7 +277,7 @@ class QuizService
                     ['description' => $question['description']],
                     [
                         'level'            => $difficulty,
-                        'concept_tag'      => $question['concept_tag'], // 
+                        'concept_tag'      => $question['concept_tag'],
                         'option_a'         => $question['option_a'],
                         'option_b'         => $question['option_b'],
                         'option_c'         => $question['option_c'],
@@ -300,6 +297,7 @@ class QuizService
             return $quiz;
         });
     }
+
     private function updateUserStreak(int $userId): void
     {
         $today = Carbon::today();
