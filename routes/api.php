@@ -6,20 +6,20 @@ use App\Http\Controllers\Categories\CategoryController;
 use App\Http\Controllers\Categories\SubcategoryController;
 use App\Http\Controllers\QuizController;
 
-Route::middleware('auth:sanctum')->group(function () { 
+Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     // 1. Profile Route
     Route::get('/user/profile', [ProfileController::class, 'show']);
 
     // Quiz Routes
-    Route::post('/quiz/generate', [QuizController::class, 'generate'])->middleware('throttle:5,1');
+    Route::post('/quiz/generate', [QuizController::class, 'generate'])->middleware('throttle:quiz-generation');
     Route::post('/quiz/{id}/finish', [QuizController::class, 'finish'])->middleware('throttle:10,1');
     Route::get('/quiz/{quiz_id}', [QuizController::class, 'show']);
 
     // 2. Categories & Subcategories Routes
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/categories/{category}/subcategories', [CategoryController::class, 'subcategories']);
-    
+
     Route::get('/user/subcategories/{subcategory}/quizzes', [SubcategoryController::class, 'quizzes']);
 });
-    
-require __DIR__.'/auth.php';
+
+require __DIR__ . '/auth.php';
